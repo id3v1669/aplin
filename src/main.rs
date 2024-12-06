@@ -11,6 +11,14 @@ struct Args {
     debug: bool,
 }
 
+// dead code is here to suppress warning as we never read
+// the value, but need just fact of it's existence
+#[allow(dead_code)]
+enum MultiEvent {
+    Adapter(bluer::AdapterEvent),
+    Device(bluer::DeviceEvent),
+}
+
 #[tokio::main]
 async fn main() {
     let args = Args::parse();
@@ -30,7 +38,7 @@ async fn main() {
             std::process::exit(1);
         }
     };
-    let mut device_event_streams = vec![];
+    let mut all_events = vec![];
     loop {
         log::debug!("Starting device scan");
         let adapter = match session.default_adapter().await {
@@ -40,7 +48,9 @@ async fn main() {
                 std::process::exit(1);
             }
         };
-        let mut events = adapter.events().await.unwrap();
+        let adapter_events: std::pin::Pin<Box<dyn futures::Stream<Item = MultiEvent>>> =
+            Box::pin(adapter.events().await.unwrap().map(MultiEvent::Adapter));
+        all_events.push(adapter_events);
         for addr in adapter.device_addresses().await.unwrap() {
             if shared_vars::BBWATCHING.lock().unwrap().contains_key(&addr) {
                 log::debug!("Device {} is already being watched", addr);
@@ -70,8 +80,10 @@ async fn main() {
                             if modalias.vendor == 76
                                 && shared_vars::APPLE_DEVICES.contains(&modalias.product)
                             {
-                                device_event_streams.push(device.events().await.unwrap());
                                 log::debug!("Device {} is an Apple device", addr);
+                                if let Ok(events) = device.events().await {
+                                    all_events.push(Box::pin(events.map(MultiEvent::Device)));
+                                }
                                 shared_vars::BBWATCHING
                                     .lock()
                                     .unwrap()
@@ -92,19 +104,8 @@ async fn main() {
             }
         }
         log::debug!("Waiting for events");
-        if device_event_streams.is_empty() {
-            log::debug!("No devices to monitor, waiting for adapter events");
-            while let Some(_) = events.next().await {
-                log::debug!("Adapter event received");
-                break;
-            }
-        }
-        while let Some(ev) = futures::stream::select_all(&mut device_event_streams)
-            .next()
-            .await
-        {
-            println!("{:?}", ev);
-            log::debug!("Device event received");
+        while let Some(_) = futures::stream::select_all(&mut all_events).next().await {
+            log::debug!("Some event received, updating device list");
             break;
         }
     }
@@ -114,8 +115,7 @@ async fn monitor_pods(
     pods: bluer::Device,
     adapter: bluer::Adapter,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    //let (mtu, x) = connect(pods.clone(), adapter.clone()).await?;
-    let (mut mtu, mut x) = match connect(pods.clone(), adapter.clone()).await {
+    let (mtu, x) = match connect(pods.clone(), adapter.clone()).await {
         Some((mtu, x)) => (mtu, x),
         None => {
             log::error!("Failed to establish connection");
@@ -189,6 +189,11 @@ async fn monitor_pods(
                                 }
                             }
                         }
+                    }
+                    0x06 => {
+                        log::debug!("headphones cover state updated");
+                        log::debug!("left cover state: {:?}", buf[6] == 0);
+                        log::debug!("right cover state: {:?}", buf[7] == 0);
                     }
                     _ => {}
                 }
