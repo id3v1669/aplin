@@ -30,7 +30,7 @@ async fn main() {
             std::process::exit(1);
         }
     };
-
+    let mut device_event_streams = vec![];
     loop {
         log::debug!("Starting device scan");
         let adapter = match session.default_adapter().await {
@@ -70,6 +70,7 @@ async fn main() {
                             if modalias.vendor == 76
                                 && shared_vars::APPLE_DEVICES.contains(&modalias.product)
                             {
+                                device_event_streams.push(device.events().await.unwrap());
                                 log::debug!("Device {} is an Apple device", addr);
                                 shared_vars::BBWATCHING
                                     .lock()
@@ -91,12 +92,19 @@ async fn main() {
             }
         }
         log::debug!("Waiting for events");
-        // waiting for bluetooth events in case aipods connect/disconnect
-        // current issue is that airpods connect/disconnect events are not being received
-        // as workaround if pods disconnects, monitoring loop doesnt end and waits for pods
-        // to reconnect - monitoring device events instead of adapter
-        while let Some(_) = events.next().await {
-            log::debug!("Event received");
+        if device_event_streams.is_empty() {
+            log::debug!("No devices to monitor, waiting for adapter events");
+            while let Some(_) = events.next().await {
+                log::debug!("Adapter event received");
+                break;
+            }
+        }
+        while let Some(ev) = futures::stream::select_all(&mut device_event_streams)
+            .next()
+            .await
+        {
+            println!("{:?}", ev);
+            log::debug!("Device event received");
             break;
         }
     }
@@ -187,39 +195,12 @@ async fn monitor_pods(
             }
             Err(e) => {
                 log::warn!("Failed to receive data: {}\n Airpods disconnected?", e);
-                let mut events = pods.events().await.unwrap();
-                let mut property_conn = false;
-                let mut property_serv_resolved = false;
-                while let Some(event) = events.next().await {
-                    match event {
-                        bluer::DeviceEvent::PropertyChanged(ref property) => {
-                            match property {
-                                bluer::DeviceProperty::Connected(true) => {
-                                    property_conn = true;
-                                }
-                                bluer::DeviceProperty::ServicesResolved(true) => {
-                                    property_serv_resolved = true;
-                                }
-                                _ => {}
-                            }
-                            if property_conn && property_serv_resolved {
-                                log::debug!("Airpods reconnected");
-                                (mtu, x) = match connect(pods.clone(), adapter.clone()).await {
-                                    Some((mtu, x)) => (mtu, x),
-                                    None => {
-                                        log::error!("Failed to establish connection");
-                                        return Ok(());
-                                    }
-                                };
-                                break;
-                            }
-                        }
-                    }
-                }
+                let mut bbwatching = shared_vars::BBWATCHING.lock().unwrap();
+                bbwatching.remove(&pods.address());
+                break;
             }
         }
     }
-    #[allow(unreachable_code)]
     Ok(())
 }
 
@@ -253,10 +234,10 @@ async fn connect(
         }
     };
 
-    let mut mtu = stream.as_ref().recv_mtu().unwrap();
+    let mtu = stream.as_ref().recv_mtu().unwrap();
     log::debug!("MTU: {}", mtu);
 
-    let mut x = std::sync::Arc::new(stream);
+    let x = std::sync::Arc::new(stream);
     // TODO: figure out how to wait for the connection to be established instead of timer
     tokio::time::sleep(std::time::Duration::from_secs(2)).await;
 
