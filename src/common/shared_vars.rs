@@ -15,3 +15,6 @@ pub const APPLE_DEVICES: &[u32] = &[
 
 pub static BBWATCHING: Lazy<Arc<Mutex<HashMap<bluer::Address, String>>>> =
     Lazy::new(|| Arc::new(Mutex::new(HashMap::new())));
+
+pub static CONFIG: Lazy<Mutex<crate::common::config::Config>> =
+    Lazy::new(|| Mutex::new(crate::common::config::Config::default()));
