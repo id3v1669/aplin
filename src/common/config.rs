@@ -1,24 +1,22 @@
 #[derive(Debug, Clone)]
 pub struct Config {
-    pub on_cover: String,            // to be options both/single/none maybe use enum
-    pub command_on_cover: String,    //to be tokio or std Command
-    pub command_on_no_cover: String, //to be tokio or std Command
+    pub on_cover: crate::common::ab::EarCoverState,
+    pub notification_timeout: notify_rust::Timeout,
     pub notify_on_full_charge: bool,
     pub notify_on_25_percent: bool,
     pub notify_on_10_percent: bool,
-    pub notify_on_status_change: bool,
+    pub notify_on_anc_change: bool,
 }
 
 impl Config {
     pub fn default() -> Self {
         Self {
-            on_cover: "both".to_string(),
-            command_on_cover: "echo cover".to_string(),
-            command_on_no_cover: "echo no cover".to_string(),
+            on_cover: crate::common::ab::EarCoverState::None,
+            notification_timeout: notify_rust::Timeout::Milliseconds(5000),
             notify_on_full_charge: true,
             notify_on_25_percent: true,
             notify_on_10_percent: true,
-            notify_on_status_change: true,
+            notify_on_anc_change: false,
         }
     }
 }

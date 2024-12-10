@@ -2,7 +2,7 @@ use once_cell::sync::Lazy;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
-pub const APPLE_DEVICES: &[u32] = &[
+pub const AB_DEVICES: &[u32] = &[
     0x2002, // AirPods 1
     0x200F, // AirPods 2
     0x2013, // AirPods 3
@@ -13,7 +13,7 @@ pub const APPLE_DEVICES: &[u32] = &[
     0x2012, // Beats Feat Pro
 ];
 
-pub static BBWATCHING: Lazy<Arc<Mutex<HashMap<bluer::Address, String>>>> =
+pub static BBWATCHING: Lazy<Arc<Mutex<HashMap<bluer::Address, bool>>>> =
     Lazy::new(|| Arc::new(Mutex::new(HashMap::new())));
 
 pub static CONFIG: Lazy<Mutex<crate::common::config::Config>> =
