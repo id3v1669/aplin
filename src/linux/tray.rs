@@ -3,8 +3,8 @@ impl ksni::Tray for crate::common::ab::ABDevice {
         env!("CARGO_PKG_NAME").into()
     }
     fn icon_name(&self) -> String {
-        if self.model_id == 0x200A {
-            "headphones-max".into()
+        if self.is_monitors() {
+            "headphones-monitors".into()
         } else {
             "headphones-buds".into()
         }
@@ -13,8 +13,8 @@ impl ksni::Tray for crate::common::ab::ABDevice {
         vec![to_icon(
             resvg::usvg::Options::default(),
             resvg::tiny_skia::Transform::identity(),
-            if self.model_id == 0x200A {
-                include_str!("../../assets/icons/headphones-max.svg")
+            if self.is_monitors() {
+                include_str!("../../assets/icons/headphones-monitors.svg")
             } else {
                 include_str!("../../assets/icons/headphones-buds.svg")
             },
@@ -40,7 +40,7 @@ impl ksni::Tray for crate::common::ab::ABDevice {
                 ..Default::default()
             },
         ];
-        if self.model_id != 0x200A {
+        if self.adaptive_capable() {
             mode.push(RadioItem {
                 label: "Adaptive".into(),
                 ..Default::default()

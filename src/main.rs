@@ -83,6 +83,10 @@ async fn main() {
             };
             log::debug!("Device {} has modalias:", addr);
             log::debug!(
+                "Device name: {:?}",
+                device.name().await.expect("Unknown").unwrap()
+            );
+            log::debug!(
                 "modalias: \n source: {} \n vendor: {} \n product: {} \n device: {}",
                 modalias.source,
                 modalias.vendor,
@@ -93,10 +97,6 @@ async fn main() {
                 && crate::common::shared_vars::AB_DEVICES.contains(&modalias.product)
             {
                 log::debug!("Device {} is an Apple device", addr);
-                log::debug!(
-                    "Device name: {:?}",
-                    device.name().await.expect("Unknown").unwrap()
-                );
                 if !crate::common::shared_vars::BBWATCHING
                     .lock()
                     .unwrap()

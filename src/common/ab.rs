@@ -343,4 +343,18 @@ impl ABDevice {
             .await
             .unwrap();
     }
+    pub fn adaptive_capable(&self) -> bool {
+        match self.model_id {
+            0x2014 => true, // AirPods Pro 2
+            0x2024 => true, // AirPods Pro 2 usb-c
+            //0x => true, // AirPods 4
+            _ => false,
+        }
+    }
+    pub fn is_monitors(&self) -> bool {
+        match self.model_id {
+            0x200A => true, // AirPods Max lightning
+            _ => false,
+        }
+    }
 }
