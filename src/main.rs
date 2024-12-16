@@ -70,6 +70,12 @@ async fn main() {
             let modalias = match device.modalias().await {
                 Ok(modalias) => {
                     if let Some(inner_modalias) = modalias {
+                        if inner_modalias.vendor != 76
+                        || !crate::common::shared_vars::AB_DEVICES.contains(&inner_modalias.product)
+                    {
+                        log::debug!("Device {} is not an Apple device", addr);
+                        continue;
+                    }
                         inner_modalias
                     } else {
                         log::warn!("Modalias is empty, skipping device: {}", addr);
@@ -93,9 +99,7 @@ async fn main() {
                 modalias.product,
                 modalias.device
             );
-            if modalias.vendor == 76
-                && crate::common::shared_vars::AB_DEVICES.contains(&modalias.product)
-            {
+           
                 log::debug!("Device {} is an Apple device", addr);
                 if !crate::common::shared_vars::BBWATCHING
                     .lock()
@@ -137,7 +141,7 @@ async fn main() {
                     }
                     _ => {}
                 }
-            }
+            
         }
         log::debug!("Waiting for events");
         while let Some(_) = futures::stream::select_all(&mut all_events).next().await {
