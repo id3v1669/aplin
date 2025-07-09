@@ -14,6 +14,7 @@ Most of them are problems with airpods in general and not with this software, bu
 * on airpods reconnect mode stays off and no sound
 * on initial connection, codec switch back and forth required to make sound work
 * on standby mode turns to off and on airpods max only left ear works untill reinit (reinit doesn't always happen)
+* when take airpods max off and both ear statuses are false disconnects, but infinitely tries to reconnect causing notification spam
 
 
 # Notes
