@@ -1,3 +1,9 @@
+use crate::common::{
+    ab_battery::{ABBattery, ABBatteryState},
+    ab_state::{Anc, EarCoverState},
+};
+use crate::data::shared_vars::{BBWATCHING, CONFIG};
+
 #[cfg(target_os = "linux")]
 use ksni::TrayMethods;
 
@@ -6,63 +12,10 @@ pub struct ABDevice {
     // apple/beats device
     pub model: String,
     pub model_id: u32,
-    pub anc_state: ANC,
+    pub anc_state: Anc,
     pub ear_cover_state: EarCoverState,
     pub battery_state: ABBattery,
     pub data_stream: Option<std::sync::Arc<bluer::l2cap::SeqPacket>>,
-}
-#[derive(Debug, Copy, Clone)]
-pub struct ABBattery {
-    pub single: Option<(ABBatteryState, u8)>,
-    pub left: Option<(ABBatteryState, u8)>,
-    pub right: Option<(ABBatteryState, u8)>,
-    pub case: Option<(ABBatteryState, u8)>,
-}
-impl ABBattery {
-    pub fn iter(&self) -> impl Iterator<Item = (String, &Option<(ABBatteryState, u8)>)> {
-        vec![
-            ("    ".to_string(), &self.single),
-            ("  L󱡒  ".to_string(), &self.left),
-            ("  R󱡒  ".to_string(), &self.right),
-            ("    ".to_string(), &self.case),
-        ]
-        .into_iter()
-    }
-}
-#[derive(Debug, Clone, PartialEq)]
-pub enum EarCoverState {
-    Both,
-    Single,
-    None,
-}
-
-// full to doesn't exist as a state, but added to simplify gui and daemon logic in future
-#[derive(Debug, Copy, Clone, PartialEq)]
-pub enum ABBatteryState {
-    Charging,
-    Discharging,
-    Low10,
-    Low25,
-    Full,
-    Disconnected,
-    Unknown,
-}
-#[derive(Debug, Copy, Clone)]
-pub enum ANC {
-    Off,
-    NoiseCancelling,
-    Transparency,
-    Adaptive,
-}
-impl ANC {
-    pub fn get_name(&self) -> &str {
-        match self {
-            ANC::Off => "Off",
-            ANC::NoiseCancelling => "Noise Cancelling",
-            ANC::Transparency => "Transparency",
-            ANC::Adaptive => "Adaptive",
-        }
-    }
 }
 
 #[allow(dead_code)]
@@ -82,7 +35,7 @@ impl ABDevice {
         Self {
             model: "Unknown".to_string(),
             model_id: 0,
-            anc_state: ANC::Off,
+            anc_state: Anc::Off,
             ear_cover_state: EarCoverState::None,
             battery_state: ABBattery {
                 single: None,
@@ -111,7 +64,7 @@ impl ABDevice {
         // dummy to have better conditional code handling
         // won't be triggered in real use
         #[cfg(not(target_os = "linux"))]
-        let gui = crate::common::ab::Dummy::new();
+        let gui = crate::common::ab_device::Dummy::new();
 
         #[cfg(target_os = "linux")]
         let gui = self.clone().spawn().await.unwrap();
@@ -195,9 +148,10 @@ impl ABDevice {
                                     }
                                 }
                             }
-                            let battery_to_pass = self.battery_state.clone();
+                            let battery_to_pass = self.battery_state;
                             tokio::spawn(async move {
-                                crate::common::commands::battery_notify(battery_to_pass).await;
+                                //crate::common::commands::battery_notify(battery_to_pass).await;
+                                battery_to_pass.battery_notify().await;
                             });
                         }
                         0x06 => {
@@ -218,31 +172,27 @@ impl ABDevice {
                         0x09 if buf[6] == 0x0d => {
                             match buf[7] {
                                 0x01 => {
-                                    log::debug!("ANC Off");
-                                    self.anc_state = ANC::Off;
+                                    log::debug!("Anc Off");
+                                    self.anc_state = Anc::Off;
                                 }
                                 0x02 => {
-                                    log::debug!("ANC NoiseCancelling");
-                                    self.anc_state = ANC::NoiseCancelling;
+                                    log::debug!("Anc NoiseCancelling");
+                                    self.anc_state = Anc::NoiseCancelling;
                                 }
                                 0x03 => {
-                                    log::debug!("ANC Transparency");
-                                    self.anc_state = ANC::Transparency;
+                                    log::debug!("Anc Transparency");
+                                    self.anc_state = Anc::Transparency;
                                 }
                                 0x04 => {
-                                    log::debug!("ANC Adaptive");
-                                    self.anc_state = ANC::Adaptive;
+                                    log::debug!("Anc Adaptive");
+                                    self.anc_state = Anc::Adaptive;
                                 }
                                 _ => {
-                                    log::debug!("Unknown ANC state: {}", buf[7]);
+                                    log::debug!("Unknown Anc state: {}", buf[7]);
                                 }
                             }
-                            let anc_to_pass = self.anc_state.clone();
-                            if crate::common::shared_vars::CONFIG
-                                .lock()
-                                .unwrap()
-                                .notify_on_anc_change
-                            {
+                            let anc_to_pass = self.anc_state;
+                            if CONFIG.lock().unwrap().notify_on_anc_change {
                                 tokio::spawn(async move {
                                     crate::common::commands::status_notify(anc_to_pass).await;
                                 });
@@ -259,8 +209,7 @@ impl ABDevice {
                 }
                 Err(e) => {
                     log::warn!("Failed to receive data: {}\n Airpods disconnected?", e);
-                    let mut bbwatching = crate::common::shared_vars::BBWATCHING.lock().unwrap();
-                    bbwatching.insert(pods.address(), false);
+                    BBWATCHING.lock().await.insert(pods.address(), false);
                     #[cfg(target_os = "linux")]
                     gui.shutdown();
 
@@ -297,8 +246,7 @@ impl ABDevice {
             Ok(stream) => stream,
             Err(e) => {
                 log::error!("Failed to connect to device: {}", e);
-                let mut bbwatching = crate::common::shared_vars::BBWATCHING.lock().unwrap();
-                bbwatching.remove(&pods.address());
+                BBWATCHING.lock().await.remove(&pods.address());
                 return None;
             }
         };
@@ -311,7 +259,7 @@ impl ABDevice {
         tokio::time::sleep(std::time::Duration::from_secs(2)).await;
         // handshake
         data_stream
-            .send(&vec![
+            .send(&[
                 0x00, 0x00, 0x04, 0x00, 0x01, 0x00, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
                 0x00, 0x00,
             ])
@@ -319,25 +267,23 @@ impl ABDevice {
             .ok()?;
         // packet to to enshure init data recieved
         data_stream
-            .send(&vec![
-                0x04, 0x00, 0x04, 0x00, 0x0f, 0x00, 0xff, 0xff, 0xff, 0xff,
-            ])
+            .send(&[0x04, 0x00, 0x04, 0x00, 0x0f, 0x00, 0xff, 0xff, 0xff, 0xff])
             .await
             .ok()?;
-        return Some((mtu, data_stream));
+        Some((mtu, data_stream))
     }
 
-    pub async fn send_anc(data_stream: &Option<std::sync::Arc<bluer::l2cap::SeqPacket>>, anc: ANC) {
-        log::debug!("Sending ANC state");
+    pub async fn send_anc(data_stream: &Option<std::sync::Arc<bluer::l2cap::SeqPacket>>, anc: Anc) {
+        log::debug!("Sending Anc state");
         let data_stream = data_stream.as_ref().unwrap();
         let anc_byte = match anc {
-            ANC::Off => 0x01,
-            ANC::NoiseCancelling => 0x02,
-            ANC::Transparency => 0x03,
-            ANC::Adaptive => 0x04,
+            Anc::Off => 0x01,
+            Anc::NoiseCancelling => 0x02,
+            Anc::Transparency => 0x03,
+            Anc::Adaptive => 0x04,
         };
         data_stream
-            .send(&vec![
+            .send(&[
                 0x04, 0x00, 0x04, 0x00, 0x09, 0x00, 0x0D, anc_byte, 0x00, 0x00, 0x00,
             ])
             .await

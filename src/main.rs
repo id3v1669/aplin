@@ -1,7 +1,10 @@
 use clap::Parser;
 use futures::StreamExt;
 
+use crate::data::shared_vars::{AB_DEVICES, BBWATCHING};
+
 mod common;
+mod data;
 #[cfg(target_os = "linux")]
 mod linux;
 
@@ -55,27 +58,20 @@ async fn main() {
             Box::pin(adapter.events().await.unwrap().map(MultiEvent::Adapter));
         all_events.push(adapter_events);
         for addr in adapter.device_addresses().await.unwrap() {
-            match crate::common::shared_vars::BBWATCHING
-                .lock()
-                .unwrap()
-                .get(&addr)
-            {
-                Some(true) => {
-                    log::debug!("Device {} is already being watched", addr);
-                    continue;
-                }
-                _ => {}
+            if let Some(true) = BBWATCHING.lock().await.get(&addr) {
+                log::debug!("Device {} is already being watched", addr);
+                continue;
             }
             let device = adapter.device(addr).unwrap();
             let modalias = match device.modalias().await {
                 Ok(modalias) => {
                     if let Some(inner_modalias) = modalias {
                         if inner_modalias.vendor != 76
-                        || !crate::common::shared_vars::AB_DEVICES.contains(&inner_modalias.product)
-                    {
-                        log::debug!("Device {} is not an Apple device", addr);
-                        continue;
-                    }
+                            || !AB_DEVICES.contains(&inner_modalias.product)
+                        {
+                            log::debug!("Device {} is not an Apple device", addr);
+                            continue;
+                        }
                         inner_modalias
                     } else {
                         log::warn!("Modalias is empty, skipping device: {}", addr);
@@ -99,54 +95,54 @@ async fn main() {
                 modalias.product,
                 modalias.device
             );
-           
-                log::debug!("Device {} is an Apple device", addr);
-                if !crate::common::shared_vars::BBWATCHING
-                    .lock()
-                    .unwrap()
-                    .contains_key(&addr)
-                {
-                    match device.events().await {
-                        Ok(events) => {
-                            crate::common::shared_vars::BBWATCHING
-                                .lock()
-                                .unwrap()
-                                .insert(addr, false);
-                            all_events.push(Box::pin(events.map(MultiEvent::Device)));
-                        }
-                        Err(e) => {
-                            log::error!("Failed to get events for device {}: {} \n   Device won't be monitored", addr, e);
-                            continue;
-                        }
-                    }
-                }
-                match device.is_connected().await {
-                    Ok(connected) if connected => {
-                        crate::common::shared_vars::BBWATCHING
-                            .lock()
-                            .unwrap()
-                            .insert(addr, true);
-                        let adapter = adapter.clone();
-                        tokio::task::spawn(async move {
-                            let mut ab_device = crate::common::ab::ABDevice::new();
-                            ab_device.model = device.name().await.expect("Unknown").unwrap();
-                            ab_device.model_id = modalias.product;
-                            crate::common::ab::ABDevice::monitor(&mut ab_device, device, adapter)
-                                .await
-                                .unwrap();
-                        });
+
+            log::debug!("Device {} is an Apple device", addr);
+
+            
+            if let std::collections::hash_map::Entry::Vacant(e) =
+                BBWATCHING.lock().await.entry(addr)
+            {
+                
+                match device.events().await {
+                    Ok(events) => {
+                        e.insert(false);
+                        all_events.push(Box::pin(events.map(MultiEvent::Device)));
                     }
                     Err(e) => {
-                        log::error!("Failed to get connection status for device {}: {}", addr, e);
+                        log::error!(
+                            "Failed to get events for device {}: {} \n   Device won't be monitored",
+                            addr,
+                            e
+                        );
+                        continue;
                     }
-                    _ => {}
                 }
-            
+            }
+            match device.is_connected().await {
+                Ok(connected) if connected => {
+                    BBWATCHING.lock().await.insert(addr, true);
+                    let adapter = adapter.clone();
+                    tokio::task::spawn(async move {
+                        let mut ab_device = crate::common::ab_device::ABDevice::new();
+                        ab_device.model = device.name().await.expect("Unknown").unwrap();
+                        ab_device.model_id = modalias.product;
+                        crate::common::ab_device::ABDevice::monitor(
+                            &mut ab_device,
+                            device,
+                            adapter,
+                        )
+                        .await
+                        .unwrap();
+                    });
+                }
+                Err(e) => {
+                    log::error!("Failed to get connection status for device {}: {}", addr, e);
+                }
+                _ => {}
+            }
         }
         log::debug!("Waiting for events");
-        while let Some(_) = futures::stream::select_all(&mut all_events).next().await {
-            log::debug!("Some event received, updating device list");
-            break;
-        }
+        let _ = futures::stream::select_all(&mut all_events).next().await.is_some();
+        log::debug!("Some event received, updating device list");
     }
 }

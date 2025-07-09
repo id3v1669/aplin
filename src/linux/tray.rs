@@ -1,4 +1,6 @@
-impl ksni::Tray for crate::common::ab::ABDevice {
+use crate::common::{ab_battery::ABBatteryState, ab_device::ABDevice, ab_state::Anc};
+
+impl ksni::Tray for ABDevice {
     fn id(&self) -> String {
         env!("CARGO_PKG_NAME").into()
     }
@@ -21,7 +23,7 @@ impl ksni::Tray for crate::common::ab::ABDevice {
         )]
     }
     fn title(&self) -> String {
-        "MyTray".into()
+        "APLin".into()
     }
     fn menu(&self) -> Vec<ksni::MenuItem<Self>> {
         let local_self = self.clone();
@@ -53,26 +55,30 @@ impl ksni::Tray for crate::common::ab::ABDevice {
                 ..Default::default()
             }
             .into(),
-            MenuItem::Separator.into(),
+            MenuItem::Separator,
             RadioGroup {
                 selected: match self.anc_state {
-                    crate::common::ab::ANC::Off => 0,
-                    crate::common::ab::ANC::NoiseCancelling => 1,
-                    crate::common::ab::ANC::Transparency => 2,
-                    crate::common::ab::ANC::Adaptive => 3,
+                    Anc::Off => 0,
+                    Anc::NoiseCancelling => 1,
+                    Anc::Transparency => 2,
+                    Anc::Adaptive => 3,
                 },
                 select: Box::new(move |_x, option| {
                     let anc = match option {
-                        1 => crate::common::ab::ANC::NoiseCancelling,
-                        2 => crate::common::ab::ANC::Transparency,
-                        3 => crate::common::ab::ANC::Adaptive,
-                        0 | _ => crate::common::ab::ANC::Off,
+                        0 => Anc::Off,
+                        1 => Anc::NoiseCancelling,
+                        2 => Anc::Transparency,
+                        3 => Anc::Adaptive,
+                        _ => {
+                            log::error!("Unknown ANC option selected: {}", option);
+                            Anc::Off
+                        }
                     };
-                    log::debug!("Setting ANC to {:?}", anc);
+                    log::debug!("Setting Anc to {:?}", anc);
                     let data_stream_to_send = local_self.data_stream.clone();
                     tokio::spawn(async move {
-                        crate::common::ab::ABDevice::send_anc(&data_stream_to_send, anc).await;
-                        log::debug!("ANC after set");
+                        ABDevice::send_anc(&data_stream_to_send, anc).await;
+                        log::debug!("Anc after set");
                     });
                 }),
                 options: mode,
@@ -82,26 +88,22 @@ impl ksni::Tray for crate::common::ab::ABDevice {
         if let Some((state, charge)) = self.battery_state.single {
             tray_item.push(
                 StandardItem {
-                    label: {
-                        let battery = match state {
-                            crate::common::ab::ABBatteryState::Charging => {
+                    label: match state {
+                            ABBatteryState::Charging => {
                                 format!("   󰂈   {}%", charge)
                             }
-                            crate::common::ab::ABBatteryState::Discharging
-                            | crate::common::ab::ABBatteryState::Low25
-                            | crate::common::ab::ABBatteryState::Low10 => {
+                            ABBatteryState::Discharging
+                            | ABBatteryState::Low25
+                            | ABBatteryState::Low10 => {
                                 format!("       {}%", charge)
                             }
-                            crate::common::ab::ABBatteryState::Full => {
+                            ABBatteryState::Full => {
                                 format!("   󰂄   {}%", charge)
                             }
-                            crate::common::ab::ABBatteryState::Unknown
-                            | crate::common::ab::ABBatteryState::Disconnected => {
-                                format!("     NA")
+                            ABBatteryState::Unknown | ABBatteryState::Disconnected => {
+                                "     NA".to_string()
                             }
-                        };
-                        battery
-                    },
+                        },
                     enabled: false,
                     ..Default::default()
                 }
@@ -116,36 +118,34 @@ impl ksni::Tray for crate::common::ab::ABDevice {
                     label: {
                         //TODO: refactor that crap
                         let lsymb = match lstate {
-                            crate::common::ab::ABBatteryState::Charging => {
+                            ABBatteryState::Charging => {
                                 " 󰂈 L󱡒  ".to_owned() + &lcharge.to_string() + "%"
                             }
-                            crate::common::ab::ABBatteryState::Discharging
-                            | crate::common::ab::ABBatteryState::Low25
-                            | crate::common::ab::ABBatteryState::Low10 => {
+                            ABBatteryState::Discharging
+                            | ABBatteryState::Low25
+                            | ABBatteryState::Low10 => {
                                 "  L󱡒  ".to_owned() + &lcharge.to_string() + "%"
                             }
-                            crate::common::ab::ABBatteryState::Full => {
+                            ABBatteryState::Full => {
                                 "󰂄 L󱡒  ".to_owned() + &lcharge.to_string() + "%"
                             }
-                            crate::common::ab::ABBatteryState::Disconnected => {
-                                "       L󱡑 ".to_string()
-                            }
-                            crate::common::ab::ABBatteryState::Unknown => "     L󱡏 NA".to_string(),
+                            ABBatteryState::Disconnected => "       L󱡑 ".to_string(),
+                            ABBatteryState::Unknown => "     L󱡏 NA".to_string(),
                         };
                         let rsymb = match rstate {
-                            crate::common::ab::ABBatteryState::Charging => {
+                            ABBatteryState::Charging => {
                                 " 󰂈 R󱡒  ".to_owned() + &rcharge.to_string() + "%"
                             }
-                            crate::common::ab::ABBatteryState::Discharging
-                            | crate::common::ab::ABBatteryState::Low25
-                            | crate::common::ab::ABBatteryState::Low10 => {
+                            ABBatteryState::Discharging
+                            | ABBatteryState::Low25
+                            | ABBatteryState::Low10 => {
                                 "  R󱡒  ".to_owned() + &rcharge.to_string() + "%"
                             }
-                            crate::common::ab::ABBatteryState::Full => {
+                            ABBatteryState::Full => {
                                 " 󰂄 R󱡏  ".to_owned() + &rcharge.to_string() + "%"
                             }
-                            crate::common::ab::ABBatteryState::Disconnected => "  R󱡑".to_string(),
-                            crate::common::ab::ABBatteryState::Unknown => "  R󱡏 NA".to_string(),
+                            ABBatteryState::Disconnected => "  R󱡑".to_string(),
+                            ABBatteryState::Unknown => "  R󱡏 NA".to_string(),
                         };
                         let battery = format!("{} |{}", lsymb, rsymb);
                         battery
@@ -159,26 +159,22 @@ impl ksni::Tray for crate::common::ab::ABDevice {
         if let Some((state, charge)) = self.battery_state.case {
             tray_item.push(
                 StandardItem {
-                    label: {
-                        let battery = match state {
-                            crate::common::ab::ABBatteryState::Charging => {
+                    label: match state {
+                            ABBatteryState::Charging => {
                                 format!("       󰂈   {}%", charge)
                             }
-                            crate::common::ab::ABBatteryState::Discharging
-                            | crate::common::ab::ABBatteryState::Low25
-                            | crate::common::ab::ABBatteryState::Low10 => {
+                            ABBatteryState::Discharging
+                            | ABBatteryState::Low25
+                            | ABBatteryState::Low10 => {
                                 format!("           {}%", charge)
                             }
-                            crate::common::ab::ABBatteryState::Full => {
+                            ABBatteryState::Full => {
                                 format!("       󰂄   {}%", charge)
                             }
-                            crate::common::ab::ABBatteryState::Unknown
-                            | crate::common::ab::ABBatteryState::Disconnected => {
-                                format!("            NA")
+                            ABBatteryState::Unknown | ABBatteryState::Disconnected => {
+                                "            NA".to_string()
                             }
-                        };
-                        battery
-                    },
+                        },
                     enabled: false,
                     ..Default::default()
                 }

@@ -1,3 +1,4 @@
+use crate::data::config::Config;
 use once_cell::sync::Lazy;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
@@ -15,8 +16,7 @@ pub const AB_DEVICES: &[u32] = &[
     0x2012, // Beats Feat Pro
 ];
 
-pub static BBWATCHING: Lazy<Arc<Mutex<HashMap<bluer::Address, bool>>>> =
-    Lazy::new(|| Arc::new(Mutex::new(HashMap::new())));
+pub static BBWATCHING: Lazy<Arc<tokio::sync::Mutex<HashMap<bluer::Address, bool>>>> =
+    Lazy::new(|| Arc::new(tokio::sync::Mutex::new(HashMap::new())));
 
-pub static CONFIG: Lazy<Mutex<crate::common::config::Config>> =
-    Lazy::new(|| Mutex::new(crate::common::config::Config::default()));
+pub static CONFIG: Lazy<Mutex<Config>> = Lazy::new(|| Mutex::new(Config::default()));

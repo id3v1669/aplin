@@ -1,6 +1,8 @@
+use crate::common::ab_state::EarCoverState;
+
 #[derive(Debug, Clone)]
 pub struct Config {
-    pub on_cover: crate::common::ab::EarCoverState,
+    pub on_cover: EarCoverState,
     pub notification_timeout: notify_rust::Timeout,
     pub notify_on_full_charge: bool,
     pub notify_on_25_percent: bool,
@@ -11,7 +13,7 @@ pub struct Config {
 impl Config {
     pub fn default() -> Self {
         Self {
-            on_cover: crate::common::ab::EarCoverState::None,
+            on_cover: EarCoverState::None,
             notification_timeout: notify_rust::Timeout::Milliseconds(5000),
             notify_on_full_charge: true,
             notify_on_25_percent: true,
