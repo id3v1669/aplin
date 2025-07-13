@@ -173,12 +173,12 @@ impl ABDevice {
 
                                 #[cfg(target_os = "linux")]
                                 let gui_clone = gui.clone();
-
+                                let timeout = CONFIG.lock().unwrap().disconnect_timeout;
                                 tokio::spawn(async move {
-                                    log::debug!("Starting 1-minute disconnect timer");
+                                    log::debug!("Starting disconnect timer");
 
                                     tokio::select! {
-                                        _ = tokio::time::sleep(std::time::Duration::from_secs(10)) => {
+                                        _ = tokio::time::sleep(std::time::Duration::from_secs(timeout)) => {
                                             log::debug!("Disconnect timer expired - disconnecting");
                                             gui_clone.shutdown();
                                             let _ = data_stream_clone.shutdown(std::net::Shutdown::Both);
@@ -340,10 +340,22 @@ impl ABDevice {
                 }
                 self.last_ear_cover_state = Some(EarCoverState::Both);
                 self.ear_cover_state = EarCoverState::Both;
+                let cb = CONFIG.lock().unwrap().command_both.clone();
+                if let Some(command) = cb {
+                    tokio::spawn(async move {
+                        crate::common::commands::run_system_command(&command).await;
+                    });
+                }
             }
             (true, false) | (false, true) => {
                 log::debug!("Single ear cover detected");
                 self.ear_cover_state = EarCoverState::Single;
+                let cb = CONFIG.lock().unwrap().command_single.clone();
+                if let Some(command) = cb {
+                    tokio::spawn(async move {
+                        crate::common::commands::run_system_command(&command).await;
+                    });
+                }
                 // if self.last_ear_cover_state == Some(EarCoverState::Both) {
                 //     self.last_anc_state = Some(self.anc_state);
                 //     //TODO: trigger commands from config for single ear cover
@@ -361,6 +373,12 @@ impl ABDevice {
                 self.ear_cover_state = EarCoverState::None;
                 if self.last_ear_cover_state == Some(EarCoverState::Both) {
                     self.last_anc_state = Some(self.anc_state);
+                }
+                let cb = CONFIG.lock().unwrap().command_none.clone();
+                if let Some(command) = cb {
+                    tokio::spawn(async move {
+                        crate::common::commands::run_system_command(&command).await;
+                    });
                 }
                 //TODO: trigger commands from config for None ear cover
 

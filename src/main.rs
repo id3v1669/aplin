@@ -1,7 +1,7 @@
 use clap::Parser;
 use futures::StreamExt;
 
-use crate::data::shared_vars::{AB_DEVICES, BBWATCHING};
+use crate::data::shared_vars::{AB_DEVICES, BBWATCHING, CONFIG};
 
 mod common;
 mod data;
@@ -9,11 +9,16 @@ mod data;
 mod linux;
 
 #[derive(Parser)]
-#[command(version, about, long_about = None)]
+#[command(name = "aplin")]
+#[command(version, about="Linux airpods helper", long_about = None)]
 struct Args {
     /// Enable Debug Mode
     #[arg(short, long)]
     debug: bool,
+
+    /// Path to the config file
+    #[arg(short = 'c')]
+    config: Option<String>,
 }
 
 // dead code is here to suppress warning as we never read
@@ -44,6 +49,12 @@ async fn main() {
         }
     };
     let mut all_events = vec![];
+
+    let new_config = crate::data::config::Config::load(args.config.map(std::path::PathBuf::from));
+    {
+        let mut config = CONFIG.lock().unwrap();
+        *config = new_config;
+    }
 
     loop {
         log::debug!("Starting device scan");
