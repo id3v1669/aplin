@@ -26,7 +26,6 @@ impl ksni::Tray for ABDevice {
         "APLin".into()
     }
     fn menu(&self) -> Vec<ksni::MenuItem<Self>> {
-        let local_self = self.clone();
         use ksni::menu::*;
         let mut mode = vec![
             RadioItem {
@@ -57,13 +56,13 @@ impl ksni::Tray for ABDevice {
             .into(),
             MenuItem::Separator,
             RadioGroup {
-                selected: match self.anc_state {
+                selected: match &self.anc_state {
                     Anc::Off => 0,
                     Anc::NoiseCancelling => 1,
                     Anc::Transparency => 2,
                     Anc::Adaptive => 3,
                 },
-                select: Box::new(move |_x, option| {
+                select: Box::new(|this: &mut Self, option| {
                     let anc = match option {
                         0 => Anc::Off,
                         1 => Anc::NoiseCancelling,
@@ -75,10 +74,9 @@ impl ksni::Tray for ABDevice {
                         }
                     };
                     log::debug!("Setting Anc to {:?}", anc);
-                    let data_stream_to_send = local_self.data_stream.clone();
+                    let self_to_move = this.clone();
                     tokio::spawn(async move {
-                        ABDevice::send_anc(&data_stream_to_send, anc).await;
-                        log::debug!("Anc after set");
+                        self_to_move.send_anc(Some(anc)).await;
                     });
                 }),
                 options: mode,
@@ -89,21 +87,21 @@ impl ksni::Tray for ABDevice {
             tray_item.push(
                 StandardItem {
                     label: match state {
-                            ABBatteryState::Charging => {
-                                format!("   󰂈   {}%", charge)
-                            }
-                            ABBatteryState::Discharging
-                            | ABBatteryState::Low25
-                            | ABBatteryState::Low10 => {
-                                format!("       {}%", charge)
-                            }
-                            ABBatteryState::Full => {
-                                format!("   󰂄   {}%", charge)
-                            }
-                            ABBatteryState::Unknown | ABBatteryState::Disconnected => {
-                                "     NA".to_string()
-                            }
-                        },
+                        ABBatteryState::Charging => {
+                            format!("   󰂈   {}%", charge)
+                        }
+                        ABBatteryState::Discharging
+                        | ABBatteryState::Low25
+                        | ABBatteryState::Low10 => {
+                            format!("       {}%", charge)
+                        }
+                        ABBatteryState::Full => {
+                            format!("   󰂄   {}%", charge)
+                        }
+                        ABBatteryState::Unknown | ABBatteryState::Disconnected => {
+                            "     NA".to_string()
+                        }
+                    },
                     enabled: false,
                     ..Default::default()
                 }
@@ -160,21 +158,21 @@ impl ksni::Tray for ABDevice {
             tray_item.push(
                 StandardItem {
                     label: match state {
-                            ABBatteryState::Charging => {
-                                format!("       󰂈   {}%", charge)
-                            }
-                            ABBatteryState::Discharging
-                            | ABBatteryState::Low25
-                            | ABBatteryState::Low10 => {
-                                format!("           {}%", charge)
-                            }
-                            ABBatteryState::Full => {
-                                format!("       󰂄   {}%", charge)
-                            }
-                            ABBatteryState::Unknown | ABBatteryState::Disconnected => {
-                                "            NA".to_string()
-                            }
-                        },
+                        ABBatteryState::Charging => {
+                            format!("       󰂈   {}%", charge)
+                        }
+                        ABBatteryState::Discharging
+                        | ABBatteryState::Low25
+                        | ABBatteryState::Low10 => {
+                            format!("           {}%", charge)
+                        }
+                        ABBatteryState::Full => {
+                            format!("       󰂄   {}%", charge)
+                        }
+                        ABBatteryState::Unknown | ABBatteryState::Disconnected => {
+                            "            NA".to_string()
+                        }
+                    },
                     enabled: false,
                     ..Default::default()
                 }

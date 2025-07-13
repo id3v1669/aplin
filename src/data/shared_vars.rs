@@ -16,6 +16,18 @@ pub const AB_DEVICES: &[u32] = &[
     0x2012, // Beats Feat Pro
 ];
 
+pub const ADAPTIVE_CAPABLE: &[u32] = &[
+    0x2019, // AirPods 4
+    0x2014, // AirPods Pro 2
+    0x2024, // AirPods Pro 2 usb-c
+];
+
+// const var with fullsize headphones
+pub const AB_MONITORS: &[u32] = &[
+    0x200A, // AirPods Max lightning
+    0x201f, // AirPods Max usb-c 2024
+];
+
 pub static BBWATCHING: Lazy<Arc<tokio::sync::Mutex<HashMap<bluer::Address, bool>>>> =
     Lazy::new(|| Arc::new(tokio::sync::Mutex::new(HashMap::new())));
 

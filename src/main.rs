@@ -95,14 +95,10 @@ async fn main() {
                 modalias.product,
                 modalias.device
             );
-
             log::debug!("Device {} is an Apple device", addr);
-
-            
             if let std::collections::hash_map::Entry::Vacant(e) =
                 BBWATCHING.lock().await.entry(addr)
             {
-                
                 match device.events().await {
                     Ok(events) => {
                         e.insert(false);
@@ -122,6 +118,7 @@ async fn main() {
                 Ok(connected) if connected => {
                     BBWATCHING.lock().await.insert(addr, true);
                     let adapter = adapter.clone();
+                    let device_c = device.clone();
                     tokio::task::spawn(async move {
                         let mut ab_device = crate::common::ab_device::ABDevice::new();
                         ab_device.model = device.name().await.expect("Unknown").unwrap();
@@ -133,6 +130,11 @@ async fn main() {
                         )
                         .await
                         .unwrap();
+                        log::debug!("Device closed {} ", addr);
+                        BBWATCHING.lock().await.insert(addr, false);
+                        device_c.disconnect().await.unwrap_or_else(|e| {
+                            log::error!("Failed to disconnect device {}: {}", addr, e);
+                        });
                     });
                 }
                 Err(e) => {
@@ -142,7 +144,10 @@ async fn main() {
             }
         }
         log::debug!("Waiting for events");
-        let _ = futures::stream::select_all(&mut all_events).next().await.is_some();
+        let _ = futures::stream::select_all(&mut all_events)
+            .next()
+            .await
+            .is_some();
         log::debug!("Some event received, updating device list");
     }
 }
