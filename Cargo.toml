@@ -3,7 +3,7 @@ name = "aplin"
 
 [package]
 name = "aplin"
-version = "0.0.1"
+version = "0.1.0"
 edition = "2021"
 
 [dependencies]
@@ -19,3 +19,8 @@ resvg = "0.45"
 notify-rust = "4.11.7"
 serde_yml = "0.0.12"
 serde = { version = "1.0", features = ["derive"] }
+
+[profile.release]
+lto = true          # Enable Link Time Optimization
+codegen-units = 1   # Reduce number of codegen units to increase optimizations.
+strip = true        # Strip symbols from binary*

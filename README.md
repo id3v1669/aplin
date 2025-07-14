@@ -5,8 +5,6 @@ headphones helper
 ## TODO
 
 * implement sending packets to devices(name, case charging sound, Toggle Conversational Awareness)
-* fix gui start on reconnect
-* read & parse config
 
 ## Known bugs
 

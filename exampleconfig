@@ -1,0 +1,9 @@
+command_both: null
+command_single: "playerctl play-pause"
+command_none: null
+notification_timeout: 5
+disconnect_timeout: 60
+notify_on_full_charge: true
+notify_on_25_percent: true
+notify_on_10_percent: true
+notify_on_anc_change: false

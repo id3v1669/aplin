@@ -13,11 +13,11 @@ mod linux;
 #[command(version, about="Linux airpods helper", long_about = None)]
 struct Args {
     /// Enable Debug Mode
-    #[arg(short, long)]
+    #[arg(short = 'd', long = "debug")]
     debug: bool,
 
     /// Path to the config file
-    #[arg(short = 'c')]
+    #[arg(short = 'c', long = "config")]
     config: Option<String>,
 }
 

@@ -1,6 +1,5 @@
-{
-  pkgs,
-}: pkgs.mkShell{
+{pkgs}:
+pkgs.mkShell {
   name = "aplin devShell";
   nativeBuildInputs = with pkgs; [
     pkg-config
