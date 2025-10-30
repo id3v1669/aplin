@@ -199,6 +199,10 @@ impl ABDevice {
                             log::debug!("Unknown settings type: {}", buf[6]);
                             // to check 0x17 0x1f 0x24 0x1b
                         }
+                        0x4b => {
+                            log::debug!("Conversation mode data");
+                            log::debug!("Data: {:?}", buf);
+                        }
                         _ => {
                             log::debug!("Unknown data type: {}", buf[4]);
                         }
@@ -350,23 +354,16 @@ impl ABDevice {
             (true, false) | (false, true) => {
                 log::debug!("Single ear cover detected");
                 self.ear_cover_state = EarCoverState::Single;
-                let cb = CONFIG.lock().unwrap().command_single.clone();
-                if let Some(command) = cb {
-                    tokio::spawn(async move {
-                        crate::common::commands::run_system_command(&command).await;
-                    });
-                }
-                // if self.last_ear_cover_state == Some(EarCoverState::Both) {
-                //     self.last_anc_state = Some(self.anc_state);
-                //     //TODO: trigger commands from config for single ear cover
 
-                //     // FIXME: state doesn't change if only one ear is covered
-                //     // Airpods Max doesn't support ANC change on Single state, check other devices for that functionality
-                //     // let self_to_move = self.clone();
-                //     // tokio::spawn(async move {
-                //     //     self_to_move.send_anc(Anc::Transparency).await; // TODO: base on config in future
-                //     // });
-                // }
+                if self.last_ear_cover_state == Some(EarCoverState::Both) {
+                    self.last_anc_state = Some(self.anc_state);
+                    let cb = CONFIG.lock().unwrap().command_single.clone();
+                    if let Some(command) = cb {
+                        tokio::spawn(async move {
+                            crate::common::commands::run_system_command(&command).await;
+                        });
+                    }
+                }
             }
             (false, false) => {
                 log::debug!("No ears covered");
@@ -380,16 +377,10 @@ impl ABDevice {
                         crate::common::commands::run_system_command(&command).await;
                     });
                 }
-                //TODO: trigger commands from config for None ear cover
-
-                // FIXME: state doesn't change if only one ear is covered
-                // Airpods Max doesn't support ANC change on None state and automatically sets ANC to Off
-                // check other devices for that functionality
-                // let self_to_move = self.clone();
-                //     tokio::spawn(async move {
-                //         self_to_move.send_anc(Anc::Off).await; // TODO: review and maybe base on config in future
-                //     });
-            }
+            } // NOTE: state doesn't change if only one ear is covered
+              // Airpods Max do not support ANC change on None/Single state and automatically sets ANC to Off
+              // Manual change is impossible in these states((
+              // check other devices for that functionality
         }
     }
 }

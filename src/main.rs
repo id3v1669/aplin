@@ -33,9 +33,11 @@ enum MultiEvent {
 async fn main() {
     let args = Args::parse();
 
-    std::env::set_var("RUST_LOG", "warn");
-    if args.debug {
-        std::env::set_var("RUST_LOG", "debug");
+    unsafe {
+        std::env::set_var("RUST_LOG", "warn");
+        if args.debug {
+            std::env::set_var("RUST_LOG", "debug");
+        }
     }
 
     env_logger::init();

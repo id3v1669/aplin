@@ -86,19 +86,18 @@ impl Config {
 
         if !path_buf.exists() {
             // Create the directory if it doesn't exist
-            if let Some(parent) = path_buf.parent() {
-                if !parent.exists() {
-                    if let Err(e) = fs::create_dir_all(parent) {
-                        log::error!("Error creating config directory: {}", e);
-                        log::error!("Falling back to default config");
-                        return Self::default();
-                    }
-                }
+            if let Some(parent) = path_buf.parent()
+                && !parent.exists()
+                && let Err(e) = fs::create_dir_all(parent)
+            {
+                log::error!("Error creating config directory: {}", e);
+                log::error!("Falling back to default config");
+                return Self::default();
             }
             match fs::File::create(&path_buf) {
                 Ok(mut file) => {
                     log::debug!("Created default aplin config at: {:#?}", path_buf);
-                    let _ = file.write_all(serde_yml::to_string(&config).unwrap().as_bytes());
+                    let _ = file.write_all(serde_json::to_string(&config).unwrap().as_bytes());
                     config
                 }
                 Err(err) => {
@@ -117,7 +116,7 @@ impl Config {
                 return Self::default();
             }
         };
-        let config_read: ConfigRead = serde_yml::from_str(&config_content_raw).unwrap();
+        let config_read: ConfigRead = serde_json::from_str(&config_content_raw).unwrap();
         config_read.into_config()
     }
 }

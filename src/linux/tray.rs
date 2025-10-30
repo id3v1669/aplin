@@ -1,4 +1,8 @@
-use crate::common::{ab_battery::ABBatteryState, ab_device::ABDevice, ab_state::Anc};
+use crate::common::{
+    ab_battery::ABBatteryState,
+    ab_device::ABDevice,
+    ab_state::{Anc, EarCoverState},
+};
 
 impl ksni::Tray for ABDevice {
     fn id(&self) -> String {
@@ -27,23 +31,28 @@ impl ksni::Tray for ABDevice {
     }
     fn menu(&self) -> Vec<ksni::MenuItem<Self>> {
         use ksni::menu::*;
+        let mode_changable = matches!(self.ear_cover_state, EarCoverState::Both);
         let mut mode = vec![
             RadioItem {
                 label: "Off".into(),
+                enabled: mode_changable,
                 ..Default::default()
             },
             RadioItem {
                 label: "Noise Cancelling".into(),
+                enabled: mode_changable,
                 ..Default::default()
             },
             RadioItem {
                 label: "Transparency".into(),
+                enabled: mode_changable,
                 ..Default::default()
             },
         ];
         if self.adaptive_capable() {
             mode.push(RadioItem {
                 label: "Adaptive".into(),
+                enabled: mode_changable,
                 ..Default::default()
             });
         }
