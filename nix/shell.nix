@@ -4,6 +4,7 @@ pkgs.mkShell {
   nativeBuildInputs = with pkgs; [
     pkg-config
     dbus
+    kdePackages.kdialog
   ];
   buildInputs = with pkgs; [
     cargo

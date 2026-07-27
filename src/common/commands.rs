@@ -40,3 +40,57 @@ pub async fn run_system_command(command: &str) {
         log::error!("Error: {}", e);
     }
 }
+
+pub async fn text_input_dialog() -> Option<String> {
+    let fallbacks: &[(&str, &[&str])] = &[
+        (
+            "zenity",
+            &["--entry", "--title", "aplin", "--text", "New name:"],
+        ),
+        (
+            "kdialog",
+            &["--title", "aplin", "--inputbox", "New name:", ""],
+        ),
+        (
+            "yad",
+            &["--entry", "--title", "aplin", "--text", "New name:"],
+        ),
+    ];
+    let mut found = None;
+    for (bin, args) in fallbacks {
+        match Command::new(bin).args(*args).output().await {
+            Ok(out) => {
+                found = Some(out);
+                break;
+            }
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => continue,
+            Err(e) => {
+                log::error!("Failed to run {}: {}", bin, e);
+                return None;
+            }
+        }
+    }
+    let output = match found {
+        Some(out) => out,
+        None => {
+            default_notification(
+                "No dialog tool found - install zenity, kdialog or yad".to_string(),
+            )
+            .await;
+            return None;
+        }
+    };
+
+    if !output.status.success() {
+        let stderr_raw = String::from_utf8_lossy(&output.stderr);
+        let stderr = stderr_raw.trim();
+        if stderr.is_empty() {
+            log::debug!("Rename dialog cancelled");
+        } else {
+            log::warn!("Rename dialog exited {}: {}", output.status, stderr);
+        }
+        return None;
+    }
+    let name = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    if name.is_empty() { None } else { Some(name) }
+}

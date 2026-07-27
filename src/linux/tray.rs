@@ -54,7 +54,14 @@ impl ksni::Tray for ABDevice {
         let mut tray_item = vec![
             StandardItem {
                 label: self.model.clone(),
-                enabled: false,
+                activate: Box::new(|this: &mut Self| {
+                    let self_to_move = this.clone();
+                    tokio::spawn(async move {
+                        if let Some(name) = crate::common::commands::text_input_dialog().await {
+                            self_to_move.send_rename(&name).await;
+                        }
+                    });
+                }),
                 ..Default::default()
             }
             .into(),

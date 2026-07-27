@@ -339,6 +339,55 @@ impl ABDevice {
             .await
             .unwrap();
     }
+
+    pub async fn send_rename(&self, name: &str) {
+        let bytes = name.as_bytes();
+        if bytes.is_empty() || bytes.len() > 255 {
+            log::error!(
+                "Invalid rename length: {} bytes (must be 1-255)",
+                bytes.len()
+            );
+            crate::common::commands::default_notification(format!(
+                "Rename failed: name must be 1-255 bytes, got {}",
+                bytes.len()
+            ))
+            .await;
+            return;
+        }
+        let Some(stream) = self.data_stream.as_ref() else {
+            log::error!("No data stream, cannot rename");
+            return;
+        };
+        // librepods reference: 04 00 04 00 1A 00 01 <len> 00 <utf-8 name>
+        let mut packet = vec![
+            0x04,
+            0x00,
+            0x04,
+            0x00,
+            0x1A,
+            0x00,
+            0x01,
+            bytes.len() as u8,
+            0x00,
+        ];
+        packet.extend_from_slice(bytes);
+        match stream.send(&packet).await {
+            Ok(_) => {
+                log::debug!("Sent rename to {:?}", name);
+                crate::common::commands::default_notification(format!(
+                    "Renamed to \"{}\" - name shows after reconnect",
+                    name
+                ))
+                .await;
+            }
+            Err(e) => {
+                log::error!("Failed to send rename: {}", e);
+                crate::common::commands::default_notification(format!("Rename failed: {}", e))
+                    .await;
+            }
+        }
+    }
+
     pub fn adaptive_capable(&self) -> bool {
         ADAPTIVE_CAPABLE.contains(&self.model_id)
     }
