@@ -158,7 +158,12 @@ impl ksni::Tray for ABDevice {
                 .into(),
             );
         }
-        if let Some((state, charge)) = self.battery_state.case {
+        if let Some((state, charge)) = self.battery_state.case
+            && !matches!(
+                state,
+                ABBatteryState::Disconnected | ABBatteryState::Unknown
+            )
+        {
             tray_item.push(
                 StandardItem {
                     label: match state {
