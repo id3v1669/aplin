@@ -58,25 +58,58 @@ async fn main() {
         *config = new_config;
     }
 
-    let adapter = match session.default_adapter().await {
-        Ok(adapter) => adapter,
-        Err(e) => {
-            log::error!("Failed to get default adapter: {}", e);
-            std::process::exit(1);
-        }
-    };
-    let adapter_events: std::pin::Pin<Box<dyn futures::Stream<Item = MultiEvent>>> =
-        Box::pin(adapter.events().await.unwrap().map(MultiEvent::Adapter));
-    all_events.push(adapter_events);
-
     loop {
+        if all_events.is_empty() {
+            let events = match session.default_adapter().await {
+                Ok(adapter) => adapter.events().await,
+                Err(e) => Err(e),
+            };
+            match events {
+                Ok(events) => {
+                    let adapter_events: std::pin::Pin<Box<dyn futures::Stream<Item = MultiEvent>>> =
+                        Box::pin(events.map(MultiEvent::Adapter));
+                    all_events.push(adapter_events);
+                    BBWATCHING.lock().await.clear();
+                }
+                Err(e) => {
+                    log::warn!("Bluetooth adapter unavailable: {}, retrying in 3s", e);
+                    tokio::time::sleep(std::time::Duration::from_secs(3)).await;
+                    continue;
+                }
+            }
+        }
+
         log::debug!("Starting device scan");
-        for addr in adapter.device_addresses().await.unwrap() {
+        let adapter = match session.default_adapter().await {
+            Ok(adapter) => adapter,
+            Err(e) => {
+                log::warn!("Bluetooth adapter unavailable: {}, resetting", e);
+                all_events.clear();
+                tokio::time::sleep(std::time::Duration::from_secs(3)).await;
+                continue;
+            }
+        };
+        let addresses = match adapter.device_addresses().await {
+            Ok(addresses) => addresses,
+            Err(e) => {
+                log::warn!("Failed to list devices: {}, resetting", e);
+                all_events.clear();
+                tokio::time::sleep(std::time::Duration::from_secs(3)).await;
+                continue;
+            }
+        };
+        for addr in addresses {
             if let Some(true) = BBWATCHING.lock().await.get(&addr) {
                 log::debug!("Device {} is already being watched", addr);
                 continue;
             }
-            let device = adapter.device(addr).unwrap();
+            let device = match adapter.device(addr) {
+                Ok(device) => device,
+                Err(e) => {
+                    log::error!("Failed to get device {}: {}", addr, e);
+                    continue;
+                }
+            };
             let modalias = match device.modalias().await {
                 Ok(modalias) => {
                     if let Some(inner_modalias) = modalias {
@@ -168,10 +201,15 @@ async fn main() {
             }
         }
         log::debug!("Waiting for events");
-        let _ = futures::stream::select_all(&mut all_events)
+        if futures::stream::select_all(&mut all_events)
             .next()
             .await
-            .is_some();
-        log::debug!("Some event received, updating device list");
+            .is_none()
+        {
+            log::warn!("All bluetooth event streams ended, resetting");
+            all_events.clear();
+        } else {
+            log::debug!("Some event received, updating device list");
+        }
     }
 }
