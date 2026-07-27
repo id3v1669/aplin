@@ -5,7 +5,6 @@ self: {
   ...
 }: let
   cfg = config.programs.aplin;
-  format = pkgs.formats.yaml {};
   inherit (pkgs.stdenv.hostPlatform) system;
 
   inherit (lib) types;
@@ -21,11 +20,10 @@ in {
       type = types.package;
     };
 
-    # right now useless as did not implement cfg reading functionaluity yet
     settings = mkOption {
-      description = "The config to use for `aplin` syntax and samples could found in [repo](https://github.com/id3v1669/aplin).";
-      default = {};
-      type = format.type;
+      description = "KDL config for `aplin`";
+      default = "";
+      type = types.lines;
     };
   };
 
@@ -37,9 +35,9 @@ in {
       };
       Service = {
         ExecStart = let
-          aplincfg = pkgs.writeText "aplincfg" "${lib.generators.toYAML {} cfg.settings}";
+          aplincfg = pkgs.writeText "config.kdl" cfg.settings;
           aplinCmd =
-            if cfg.settings != null
+            if cfg.settings != ""
             then "--config ${aplincfg}"
             else "";
         in ''

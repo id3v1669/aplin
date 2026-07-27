@@ -230,6 +230,11 @@ impl ABDevice {
                 .await;
         }
 
+        let cd = CONFIG.lock().unwrap().command_disconnect.clone();
+        if let Some(command) = cd {
+            crate::common::commands::run_system_command(&command).await;
+        }
+
         Ok(())
     }
     async fn connect(

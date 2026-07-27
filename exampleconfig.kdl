@@ -1,0 +1,20 @@
+// commands to run on ear cover changes
+covered {
+    both "playerctl play-pause"
+    // single "echo single"
+    // none "echo none"
+}
+
+notification {
+    timeout "5s" // durations: "30s", "5m", "1h", or bare seconds
+    full #true
+    on25 #true
+    on10 #true
+    anc #false
+}
+
+disconnect {
+    // command runs on any disconnect (idle timer, out of range, pods in case)
+    // command "echo disconnected"
+    timeout "60s"
+}
