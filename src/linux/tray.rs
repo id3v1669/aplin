@@ -8,23 +8,18 @@ impl ksni::Tray for ABDevice {
     fn id(&self) -> String {
         env!("CARGO_PKG_NAME").into()
     }
-    fn icon_name(&self) -> String {
-        if self.is_monitors() {
-            "headphones-monitors".into()
-        } else {
-            "headphones-buds".into()
-        }
-    }
     fn icon_pixmap(&self) -> Vec<ksni::Icon> {
-        vec![to_icon(
-            resvg::usvg::Options::default(),
-            resvg::tiny_skia::Transform::identity(),
-            if self.is_monitors() {
-                include_str!("../../assets/icons/headphones-monitors.svg")
-            } else {
-                include_str!("../../assets/icons/headphones-buds.svg")
-            },
-        )]
+        static BUDS: std::sync::LazyLock<ksni::Icon> = std::sync::LazyLock::new(|| {
+            to_icon(include_str!("../../assets/icons/headphones-buds.svg"))
+        });
+        static MONITORS: std::sync::LazyLock<ksni::Icon> = std::sync::LazyLock::new(|| {
+            to_icon(include_str!("../../assets/icons/headphones-monitors.svg"))
+        });
+        vec![if self.is_monitors() {
+            MONITORS.clone()
+        } else {
+            BUDS.clone()
+        }]
     }
     fn title(&self) -> String {
         "APLin".into()
@@ -192,32 +187,37 @@ impl ksni::Tray for ABDevice {
     }
 }
 
-pub fn to_icon(
-    options: resvg::usvg::Options,
-    transform: resvg::tiny_skia::Transform,
-    svg_str: &str,
-) -> ksni::Icon {
-    let rtree = resvg::usvg::Tree::from_str(svg_str, &options).unwrap_or_else(|e| {
-        panic!("Failed to parse SVG: {e}");
-    });
+const ICON_SIZE: u32 = 32;
+
+pub fn to_icon(svg_str: &str) -> ksni::Icon {
+    let rtree = resvg::usvg::Tree::from_str(svg_str, &resvg::usvg::Options::default())
+        .unwrap_or_else(|e| {
+            panic!("Failed to parse SVG: {e}");
+        });
 
     let size = rtree.size();
-    let width = size.width() as u32;
-    let height = size.height() as u32;
+    let scale = ICON_SIZE as f32 / size.width().max(size.height());
 
-    let mut pixmap = resvg::tiny_skia::Pixmap::new(width, height).unwrap();
+    let mut pixmap = resvg::tiny_skia::Pixmap::new(ICON_SIZE, ICON_SIZE).unwrap();
 
-    resvg::render(&rtree, transform, &mut pixmap.as_mut());
+    resvg::render(
+        &rtree,
+        resvg::tiny_skia::Transform::from_scale(scale, scale),
+        &mut pixmap.as_mut(),
+    );
 
     let argb_data: Vec<u8> = pixmap
-        .take()
-        .chunks(4)
-        .flat_map(|rgba| [rgba[3], rgba[0], rgba[1], rgba[2]])
+        .pixels()
+        .iter()
+        .flat_map(|p| {
+            let c = p.demultiply();
+            [c.alpha(), c.red(), c.green(), c.blue()]
+        })
         .collect();
 
     ksni::Icon {
-        width: size.width() as i32,
-        height: size.height() as i32,
+        width: ICON_SIZE as i32,
+        height: ICON_SIZE as i32,
         data: argb_data,
     }
 }
