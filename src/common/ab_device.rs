@@ -88,6 +88,10 @@ impl ABDevice {
                     match buf[4] {
                         0x04 => {
                             log::debug!("battery data");
+                            if buf.len() < 7 || buf.len() < 7 + buf[6] as usize * 5 {
+                                log::error!("Malformed battery packet: {:?}", buf);
+                                continue;
+                            }
                             for payload_sector_start in (7..7 + buf[6] as usize * 5).step_by(5) {
                                 let charge = if buf[payload_sector_start + 2] <= 100 {
                                     buf[payload_sector_start + 2]
@@ -166,6 +170,10 @@ impl ABDevice {
                                 log::debug!("Cancelled pending disconnect task");
                             }
                             log::debug!("Device info data");
+                            if buf.len() < 8 {
+                                log::error!("Malformed device info packet: {:?}", buf);
+                                continue;
+                            }
                             self.cover_event(buf[6], buf[7]);
                             if self.ear_cover_state == EarCoverState::None {
                                 let (tx, rx) = oneshot::channel();
@@ -192,11 +200,11 @@ impl ABDevice {
                                 disconnect_tx = Some(tx);
                             }
                         }
-                        0x09 if buf[6] == 0x0d => {
+                        0x09 if buf.len() >= 8 && buf[6] == 0x0d => {
                             self.anc_event(buf[7]);
                         }
                         0x09 => {
-                            log::debug!("Unknown settings type: {}", buf[6]);
+                            log::debug!("Unknown or short settings packet: {:?}", buf);
                             // to check 0x17 0x1f 0x24 0x1b
                         }
                         0x4b => {
@@ -247,7 +255,7 @@ impl ABDevice {
             Ok(stream) => stream,
             Err(e) => {
                 log::error!("Failed to connect to device: {}", e);
-                BBWATCHING.lock().await.remove(&pods.address());
+                BBWATCHING.lock().await.insert(pods.address(), false);
                 return None;
             }
         };

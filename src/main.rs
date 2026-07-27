@@ -58,18 +58,19 @@ async fn main() {
         *config = new_config;
     }
 
+    let adapter = match session.default_adapter().await {
+        Ok(adapter) => adapter,
+        Err(e) => {
+            log::error!("Failed to get default adapter: {}", e);
+            std::process::exit(1);
+        }
+    };
+    let adapter_events: std::pin::Pin<Box<dyn futures::Stream<Item = MultiEvent>>> =
+        Box::pin(adapter.events().await.unwrap().map(MultiEvent::Adapter));
+    all_events.push(adapter_events);
+
     loop {
         log::debug!("Starting device scan");
-        let adapter = match session.default_adapter().await {
-            Ok(adapter) => adapter,
-            Err(e) => {
-                log::error!("Failed to get default adapter: {}", e);
-                std::process::exit(1);
-            }
-        };
-        let adapter_events: std::pin::Pin<Box<dyn futures::Stream<Item = MultiEvent>>> =
-            Box::pin(adapter.events().await.unwrap().map(MultiEvent::Adapter));
-        all_events.push(adapter_events);
         for addr in adapter.device_addresses().await.unwrap() {
             if let Some(true) = BBWATCHING.lock().await.get(&addr) {
                 log::debug!("Device {} is already being watched", addr);
@@ -99,7 +100,12 @@ async fn main() {
             log::debug!("Device {} has modalias:", addr);
             log::debug!(
                 "Device name: {:?}",
-                device.name().await.expect("Unknown").unwrap()
+                device
+                    .name()
+                    .await
+                    .ok()
+                    .flatten()
+                    .unwrap_or_else(|| "Unknown".to_string())
             );
             log::debug!(
                 "modalias: \n source: {} \n vendor: {} \n product: {} \n device: {}",
@@ -134,7 +140,12 @@ async fn main() {
                     let device_c = device.clone();
                     tokio::task::spawn(async move {
                         let mut ab_device = crate::common::ab_device::ABDevice::new();
-                        ab_device.model = device.name().await.expect("Unknown").unwrap();
+                        ab_device.model = device
+                            .name()
+                            .await
+                            .ok()
+                            .flatten()
+                            .unwrap_or_else(|| "Unknown".to_string());
                         ab_device.model_id = modalias.product;
                         crate::common::ab_device::ABDevice::monitor(
                             &mut ab_device,
