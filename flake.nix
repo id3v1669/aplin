@@ -24,9 +24,7 @@
       aplin = (pkgsFor system).callPackage ./nix/package.nix {};
     });
 
-    defaultPackage = eachSystem (system: self.packages.${system}.default);
-
-    homeManagerModules.default = import ./nix/module.nix self;
+    homeModules.default = import ./nix/module.nix self;
 
     overlays.default = final: prev: {
       aplin = self.packages.${prev.system}.default;
