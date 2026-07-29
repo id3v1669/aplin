@@ -14,6 +14,7 @@ pub struct Config {
     pub notify_on_25_percent: bool,
     pub notify_on_10_percent: bool,
     pub notify_on_anc_change: bool,
+    pub default_anc: crate::common::ab_state::Anc,
 }
 
 impl Default for Config {
@@ -29,6 +30,7 @@ impl Default for Config {
             notify_on_25_percent: true,
             notify_on_10_percent: true,
             notify_on_anc_change: false,
+            default_anc: crate::common::ab_state::Anc::Transparency,
         }
     }
 }
@@ -100,6 +102,17 @@ impl Config {
             config.command_disconnect = arg_str(disconnect, "command");
             if let Some(secs) = arg_duration_secs(disconnect, "timeout") {
                 config.disconnect_timeout = secs;
+            }
+        }
+        if let Some(anc) = children(&doc, "anc")
+            && let Some(raw) = arg_str(anc, "default")
+        {
+            match crate::common::ab_state::Anc::from_config_str(&raw) {
+                Some(v) => config.default_anc = v,
+                None => log::error!(
+                    "Unknown anc default {:?}, using transparency (expected off, noise-cancelling, transparency or adaptive)",
+                    raw
+                ),
             }
         }
         Ok(config)

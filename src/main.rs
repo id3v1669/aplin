@@ -180,6 +180,12 @@ async fn main() {
                             .flatten()
                             .unwrap_or_else(|| "Unknown".to_string());
                         ab_device.model_id = modalias.product;
+                        ab_device.address = addr;
+                        ab_device.last_anc_state = crate::data::shared_vars::ANC_STATES
+                            .lock()
+                            .unwrap()
+                            .get(&addr)
+                            .copied();
                         crate::common::ab_device::ABDevice::monitor(
                             &mut ab_device,
                             device,

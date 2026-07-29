@@ -2,7 +2,7 @@ use crate::common::{
     ab_battery::{ABBattery, ABBatteryState},
     ab_state::{Anc, EarCoverState},
 };
-use crate::data::shared_vars::{AB_MONITORS, ADAPTIVE_CAPABLE, BBWATCHING, CONFIG};
+use crate::data::shared_vars::{AB_MONITORS, ADAPTIVE_CAPABLE, ANC_STATES, BBWATCHING, CONFIG};
 use tokio::sync::oneshot;
 
 #[cfg(target_os = "linux")]
@@ -13,6 +13,7 @@ pub struct ABDevice {
     // apple/beats device
     pub model: String,
     pub model_id: u32,
+    pub address: bluer::Address,
     pub anc_state: Anc,
     pub last_anc_state: Option<Anc>,
     pub ear_cover_state: EarCoverState,
@@ -38,6 +39,7 @@ impl ABDevice {
         Self {
             model: "Unknown".to_string(),
             model_id: 0,
+            address: bluer::Address::any(),
             anc_state: Anc::Off,
             ear_cover_state: EarCoverState::None,
             last_anc_state: None,
@@ -309,6 +311,12 @@ impl ABDevice {
                 log::debug!("Unknown Anc state: {}", anc_byte);
             }
         }
+        if self.ear_cover_state == EarCoverState::Both {
+            ANC_STATES
+                .lock()
+                .unwrap()
+                .insert(self.address, self.anc_state);
+        }
         let anc_to_pass = self.anc_state;
         if CONFIG.lock().unwrap().notify_on_anc_change {
             tokio::spawn(async move {
@@ -319,16 +327,19 @@ impl ABDevice {
 
     pub async fn send_anc(&self, anc: Option<Anc>) {
         log::debug!("Sending Anc state: {:?}", anc);
-        let anc_byte = if let Some(anc) = anc {
-            match anc {
-                Anc::Off => 0x01,
-                Anc::NoiseCancelling => 0x02,
-                Anc::Transparency => 0x03,
-                Anc::Adaptive => 0x04,
-            }
-        } else {
-            log::debug!("Anc state is None, falling back to default");
-            0x03 // TODO: pull default from config
+        let anc = anc.unwrap_or_else(|| {
+            let default = CONFIG.lock().unwrap().default_anc;
+            log::debug!(
+                "Anc state is None, falling back to configured default {:?}",
+                default
+            );
+            default
+        });
+        let anc_byte = match anc {
+            Anc::Off => 0x01,
+            Anc::NoiseCancelling => 0x02,
+            Anc::Transparency => 0x03,
+            Anc::Adaptive => 0x04,
         };
         self.data_stream
             .as_ref()
@@ -419,6 +430,10 @@ impl ABDevice {
 
                 if self.last_ear_cover_state == Some(EarCoverState::Both) {
                     self.last_anc_state = Some(self.anc_state);
+                    ANC_STATES
+                        .lock()
+                        .unwrap()
+                        .insert(self.address, self.anc_state);
                     let cb = CONFIG.lock().unwrap().command_single.clone();
                     if let Some(command) = cb {
                         tokio::spawn(async move {
@@ -432,6 +447,10 @@ impl ABDevice {
                 self.ear_cover_state = EarCoverState::None;
                 if self.last_ear_cover_state == Some(EarCoverState::Both) {
                     self.last_anc_state = Some(self.anc_state);
+                    ANC_STATES
+                        .lock()
+                        .unwrap()
+                        .insert(self.address, self.anc_state);
                 }
                 let cb = CONFIG.lock().unwrap().command_none.clone();
                 if let Some(command) = cb {

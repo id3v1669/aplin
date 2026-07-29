@@ -18,3 +18,9 @@ disconnect {
     // command "echo disconnected"
     timeout "60s"
 }
+
+anc {
+    // mode applied on first connect after daemon start per-device
+    // availible: "off", "noise-cancelling", "transparency", "adaptive"
+    default "transparency"
+}

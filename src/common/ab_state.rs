@@ -21,4 +21,13 @@ impl Anc {
             Anc::Adaptive => "Adaptive",
         }
     }
+    pub fn from_config_str(s: &str) -> Option<Self> {
+        match s.to_ascii_lowercase().as_str() {
+            "off" => Some(Anc::Off),
+            "noise-cancelling" => Some(Anc::NoiseCancelling),
+            "transparency" => Some(Anc::Transparency),
+            "adaptive" => Some(Anc::Adaptive),
+            _ => None,
+        }
+    }
 }

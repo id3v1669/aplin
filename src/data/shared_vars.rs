@@ -42,3 +42,6 @@ pub static BBWATCHING: Lazy<Arc<tokio::sync::Mutex<HashMap<bluer::Address, bool>
     Lazy::new(|| Arc::new(tokio::sync::Mutex::new(HashMap::new())));
 
 pub static CONFIG: Lazy<Mutex<Config>> = Lazy::new(|| Mutex::new(Config::default()));
+
+pub static ANC_STATES: Lazy<Mutex<HashMap<bluer::Address, crate::common::ab_state::Anc>>> =
+    Lazy::new(|| Mutex::new(HashMap::new()));
