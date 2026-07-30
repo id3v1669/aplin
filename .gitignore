@@ -1,4 +1,5 @@
 .direnv
+tmp
 target
 result
 NOTES.md

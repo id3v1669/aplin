@@ -77,10 +77,45 @@ impl ABDevice {
         #[cfg(target_os = "linux")]
         let gui = self.clone().spawn().await.unwrap();
 
+        let mut received_any = false;
+        let mut init_retries = 0;
         loop {
             let mut buf = vec![0u8; mtu.into()];
-            match data_stream.recv(&mut buf).await {
+            let received = if received_any {
+                data_stream.recv(&mut buf).await
+            } else {
+                match tokio::time::timeout(
+                    std::time::Duration::from_secs(5),
+                    data_stream.recv(&mut buf),
+                )
+                .await
+                {
+                    Ok(result) => result,
+                    Err(_) => {
+                        if init_retries >= 3 {
+                            log::warn!(
+                                "No AAP data after {} handshake attempts, waiting passively",
+                                init_retries + 1
+                            );
+                            received_any = true;
+                        } else {
+                            init_retries += 1;
+                            log::warn!(
+                                "No AAP data 5s after handshake, resending (attempt {})",
+                                init_retries + 1
+                            );
+                            if Self::send_init(&data_stream).await.is_none() {
+                                log::error!("Failed to resend handshake, closing connection");
+                                break;
+                            }
+                        }
+                        continue;
+                    }
+                }
+            };
+            match received {
                 Ok(bytes) => {
+                    received_any = true;
                     let buf = &buf[0..bytes];
                     if buf.len() < 5 {
                         //FIXME trggered on data_stream_clone.shutdown(std::net::Shutdown::Both);
@@ -273,6 +308,12 @@ impl ABDevice {
         let data_stream = std::sync::Arc::new(stream);
         // TODO: figure out how to wait for the connection to be established instead of timer
         tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+        Self::send_init(&data_stream).await?;
+        Some((mtu, data_stream))
+    }
+
+    // AAP handshake + notification request; the device starts sending data only after these
+    async fn send_init(data_stream: &std::sync::Arc<bluer::l2cap::SeqPacket>) -> Option<()> {
         // handshake
         data_stream
             .send(&[
@@ -286,7 +327,7 @@ impl ABDevice {
             .send(&[0x04, 0x00, 0x04, 0x00, 0x0f, 0x00, 0xff, 0xff, 0xff, 0xff])
             .await
             .ok()?;
-        Some((mtu, data_stream))
+        Some(())
     }
 
     pub fn anc_event(&mut self, anc_byte: u8) {
