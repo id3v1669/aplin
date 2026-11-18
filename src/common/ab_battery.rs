@@ -25,11 +25,14 @@ impl ABBattery {
         ]
         .into_iter()
     }
-    pub async fn battery_notify(&self) {
+    pub async fn battery_notify(&self, prev: &ABBattery) {
         let config: crate::data::config::Config =
             crate::data::shared_vars::CONFIG.lock().unwrap().clone();
-        for (name, battery) in self.iter() {
+        for ((name, battery), (_, prev_battery)) in self.iter().zip(prev.iter()) {
             if let Some((state, _charge)) = battery {
+                if prev_battery.map(|(s, _)| s) == Some(*state) {
+                    continue;
+                }
                 match state {
                     ABBatteryState::Low25 if config.notify_on_25_percent => {
                         log::debug!("Battery is low25");

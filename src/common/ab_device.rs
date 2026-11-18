@@ -16,6 +16,7 @@ pub struct ABDevice {
     pub address: bluer::Address,
     pub anc_state: Anc,
     pub last_anc_state: Option<Anc>,
+    pub notified_anc_state: Option<Anc>,
     pub ear_cover_state: EarCoverState,
     pub last_ear_cover_state: Option<EarCoverState>,
     pub battery_state: ABBattery,
@@ -43,6 +44,7 @@ impl ABDevice {
             anc_state: Anc::Off,
             ear_cover_state: EarCoverState::None,
             last_anc_state: None,
+            notified_anc_state: None,
             last_ear_cover_state: None,
             battery_state: ABBattery {
                 single: None,
@@ -129,6 +131,7 @@ impl ABDevice {
                                 log::error!("Malformed battery packet: {:?}", buf);
                                 continue;
                             }
+                            let prev_battery = self.battery_state;
                             for payload_sector_start in (7..7 + buf[6] as usize * 5).step_by(5) {
                                 let charge = if buf[payload_sector_start + 2] <= 100 {
                                     buf[payload_sector_start + 2]
@@ -198,7 +201,7 @@ impl ABDevice {
                             }
                             let battery_to_pass = self.battery_state;
                             tokio::spawn(async move {
-                                battery_to_pass.battery_notify().await;
+                                battery_to_pass.battery_notify(&prev_battery).await;
                             });
                         }
                         0x06 => {
@@ -358,6 +361,10 @@ impl ABDevice {
                 .unwrap()
                 .insert(self.address, self.anc_state);
         }
+        if self.notified_anc_state == Some(self.anc_state) {
+            return;
+        }
+        self.notified_anc_state = Some(self.anc_state);
         let anc_to_pass = self.anc_state;
         if CONFIG.lock().unwrap().notify_on_anc_change {
             tokio::spawn(async move {
@@ -447,62 +454,44 @@ impl ABDevice {
         AB_MONITORS.contains(&self.model_id)
     }
     pub fn cover_event(&mut self, left_cover: u8, right_cover: u8) {
-        match (left_cover == 0, right_cover == 0) {
-            (true, true) => {
-                log::debug!("Both ears covered");
-                if self.last_ear_cover_state != Some(EarCoverState::Both) {
-                    let self_to_move = self.clone();
-                    tokio::spawn(async move {
-                        self_to_move.send_anc(self_to_move.last_anc_state).await;
-                    });
-                }
-                self.last_ear_cover_state = Some(EarCoverState::Both);
-                self.ear_cover_state = EarCoverState::Both;
-                let cb = CONFIG.lock().unwrap().command_both.clone();
-                if let Some(command) = cb {
-                    tokio::spawn(async move {
-                        crate::common::commands::run_system_command(&command).await;
-                    });
-                }
-            }
-            (true, false) | (false, true) => {
-                log::debug!("Single ear cover detected");
-                self.ear_cover_state = EarCoverState::Single;
-
-                if self.last_ear_cover_state == Some(EarCoverState::Both) {
-                    self.last_anc_state = Some(self.anc_state);
-                    ANC_STATES
-                        .lock()
-                        .unwrap()
-                        .insert(self.address, self.anc_state);
-                    let cb = CONFIG.lock().unwrap().command_single.clone();
-                    if let Some(command) = cb {
-                        tokio::spawn(async move {
-                            crate::common::commands::run_system_command(&command).await;
-                        });
-                    }
-                }
-            }
-            (false, false) => {
-                log::debug!("No ears covered");
-                self.ear_cover_state = EarCoverState::None;
-                if self.last_ear_cover_state == Some(EarCoverState::Both) {
-                    self.last_anc_state = Some(self.anc_state);
-                    ANC_STATES
-                        .lock()
-                        .unwrap()
-                        .insert(self.address, self.anc_state);
-                }
-                let cb = CONFIG.lock().unwrap().command_none.clone();
-                if let Some(command) = cb {
-                    tokio::spawn(async move {
-                        crate::common::commands::run_system_command(&command).await;
-                    });
-                }
-            } // NOTE: state doesn't change if only one ear is covered
-              // Airpods Max do not support ANC change on None/Single state and automatically sets ANC to Off
-              // Manual change is impossible in these states((
-              // check other devices for that functionality
+        let new_state = match (left_cover == 0, right_cover == 0) {
+            (true, true) => EarCoverState::Both,
+            (true, false) | (false, true) => EarCoverState::Single,
+            (false, false) => EarCoverState::None,
+        };
+        log::debug!("Ear cover state: {:?}", new_state);
+        let prev = self.last_ear_cover_state.clone();
+        self.ear_cover_state = new_state.clone();
+        self.last_ear_cover_state = Some(new_state.clone());
+        if prev.as_ref() == Some(&new_state) {
+            return;
         }
+        let from_both = prev == Some(EarCoverState::Both);
+        if from_both {
+            self.last_anc_state = Some(self.anc_state);
+            ANC_STATES
+                .lock()
+                .unwrap()
+                .insert(self.address, self.anc_state);
+        }
+        let command = match new_state {
+            EarCoverState::Both => {
+                let self_to_move = self.clone();
+                tokio::spawn(async move {
+                    self_to_move.send_anc(self_to_move.last_anc_state).await;
+                });
+                CONFIG.lock().unwrap().command_both.clone()
+            }
+            EarCoverState::Single => CONFIG.lock().unwrap().command_single.clone(),
+            EarCoverState::None => CONFIG.lock().unwrap().command_none.clone(),
+        };
+        if let Some(command) = command {
+            tokio::spawn(async move {
+                crate::common::commands::run_system_command(&command).await;
+            });
+        } // NOTE: state doesn't change if only one ear is covered
+        // Airpods Max do not support ANC change on None/Single state and automatically sets ANC to Off
+        // Manual change is impossible in these states((
+        // check other devices for that functionality
     }
 }

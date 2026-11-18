@@ -5,7 +5,7 @@ pub enum EarCoverState {
     None,
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq)]
 pub enum Anc {
     Off,
     NoiseCancelling,

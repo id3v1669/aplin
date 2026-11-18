@@ -11,15 +11,15 @@ authors = [
 
 [dependencies]
 bluer = { version = "0.17.4", features = [ "bluetoothd", "l2cap" ] }
-tokio = { version = "1.53", features = ["full"] }
-clap = { version = "4.6.4", features = ["derive"] }
+tokio = { version = "1.54", features = ["full"] }
+clap = { version = "4.6.8", features = ["derive"] }
 log = "0.4.33"
 env_logger = "0.11"
 futures = "0.3"
 once_cell = "1.21"
-ksni = "0.3.6"
-resvg = "0.47"
-notify-rust = "4.18.0"
+ksni = "0.3.7"
+resvg = "0.50"
+notify-rust = "4.19.0"
 kdl = "6"
 
 [profile.release]
